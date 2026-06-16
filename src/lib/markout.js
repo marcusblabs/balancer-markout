@@ -72,17 +72,47 @@ function groupStats(rows) {
   }
 }
 
+// Per-minute volume-weighted markout bps, keyed by price-minute.
+function perMinuteBps(rows) {
+  const m = new Map()
+  for (const x of rows) {
+    const e = m.get(x.minute) || { m5: 0, w: 0 }
+    e.m5 += x.m5; e.w += x.notionalUsd; m.set(x.minute, e)
+  }
+  const o = new Map()
+  for (const [k, e] of m) if (e.w > 0) o.set(k, (e.m5 / e.w) * 10000)
+  return o
+}
+
+// Paired (matched-minute) differential: in minutes where BOTH pools have this
+// flow, the shared BTC/ETH 5-min drift cancels, leaving the bot's effect. This
+// is the correct differential for two pools holding identical assets — it slashes
+// the variance vs comparing window means.
+function pairedDiff(treatRows, ctrlRows) {
+  const T = perMinuteBps(treatRows), C = perMinuteBps(ctrlRows)
+  const diffs = []
+  for (const [k, v] of T) if (C.has(k)) diffs.push(v - C.get(k))
+  if (diffs.length < 8) return { n: diffs.length, delta: null, se: null, sigma: null, significant: null }
+  const mean = diffs.reduce((a, x) => a + x, 0) / diffs.length
+  const sd = Math.sqrt(diffs.reduce((a, x) => a + (x - mean) ** 2, 0) / (diffs.length - 1))
+  const se = sd / Math.sqrt(diffs.length)
+  return { n: diffs.length, delta: mean, se, sigma: se > 0 ? Math.abs(mean) / se : null, significant: se > 0 ? Math.abs(mean) > 1.96 * se : null }
+}
+
 function compare(windowed, label, filterFn) {
-  const treat = groupStats(windowed.filter((s) => s.pool === 'treatment' && filterFn(s)))
-  const ctrl = groupStats(windowed.filter((s) => s.pool === 'control' && filterFn(s)))
-  let delta = null, deltaSE = null, sigma = null, significant = null
+  const treatRows = windowed.filter((s) => s.pool === 'treatment' && filterFn(s))
+  const ctrlRows = windowed.filter((s) => s.pool === 'control' && filterFn(s))
+  const treat = groupStats(treatRows)
+  const ctrl = groupStats(ctrlRows)
+  // Unpaired (window-mean) differential — naive, noisy.
+  let delta = null, deltaSE = null
   if (treat.m5Bps != null && ctrl.m5Bps != null && treat.se != null && ctrl.se != null) {
     delta = treat.m5Bps - ctrl.m5Bps
     deltaSE = Math.sqrt(treat.se ** 2 + ctrl.se ** 2)
-    sigma = deltaSE > 0 ? Math.abs(delta) / deltaSE : null
-    significant = deltaSE > 0 ? Math.abs(delta) > 1.96 * deltaSE : null
   }
-  return { label, treat, ctrl, delta, deltaSE, sigma, significant }
+  // Paired (matched-minute) differential — the headline test.
+  const paired = pairedDiff(treatRows, ctrlRows)
+  return { label, treat, ctrl, delta, deltaSE, paired }
 }
 
 export function inWindow(swaps, days, nowMs) {

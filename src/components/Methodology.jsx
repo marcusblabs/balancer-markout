@@ -8,7 +8,8 @@ const DEFS = [
   ['External vs bot flow', 'External = retail / third-party arbitrageurs. Bot = the fee-discount LVR bot. The bot\'s own markout is negative by design (it extracts the pool\'s LVR) — but that value is returned to LPs, so judge the pool on its EXTERNAL-flow markout.'],
   ['The comparison', 'Both pools are identical cbBTC/WETH reCLAMM pools, so they share one reference price. The hypothesis: if the bot keeps the price fresher, external/retail flow arrives less toxic and the bot pool shows higher external-flow markout. We test it same-window with confidence intervals rather than asserting it.'],
   ['Same window only', 'The control was deployed after the bot pool, so the comparison is clamped to the period BOTH pools are live — otherwise the bot pool\'s longer, more volatile history (e.g. the Saylor BTC move) biases the result.'],
-  ['Confidence & the noise floor', 'Per-swap markout on a correlated pair at minute price resolution is dominated by genuine 5-min BTC/ETH drift — tens of bps per swap. Clustering by price-minute, the standard error is ~1–2 bps, comparable to the effect we are hunting. So single-bps differences read as "within noise"; only a sustained, multi-week gap is real.'],
+  ['The noise floor', 'Per-swap markout on a correlated pair at minute resolution is dominated by genuine 5-min BTC/ETH drift — ~tens of bps per swap. (Confirmed: switching the reference to deep Ethereum-mainnet prices did not reduce it — it is real price movement, not feed quality.)'],
+  ['Paired (matched-minute) Δ', 'The fix: both pools hold the same assets, so in any given minute they face the SAME drift. Comparing them within the same minute cancels that shared drift, cutting the noise ~3×. This is the headline test; the naive window-mean difference is far noisier and understates significance. Method inspired by an earlier reCLAMM markout query.'],
 ]
 
 export default function Methodology() {

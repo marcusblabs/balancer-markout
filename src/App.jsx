@@ -55,10 +55,12 @@ export default function App() {
   const statusText = { loading: 'Loading cached results…', executing: 'Running query…', polling: 'Waiting for Dune…' }[status]
   const hasData = !!swaps.length
 
-  // Headline = the external-flow comparison, framed honestly with its verdict.
+  // Headline = the paired (matched-minute) external-flow comparison — the test
+  // that cancels the shared BTC/ETH drift.
   const ext = mk.comparisons.find((c) => c.label === 'External flow')
-  const within = ext && ext.significant === false
-  const verdictColor = !ext || ext.significant == null ? 'var(--muted2)' : within ? 'var(--muted2)' : ext.delta >= 0 ? 'var(--pos)' : 'var(--warn)'
+  const p = ext?.paired
+  const within = p && p.significant === false
+  const verdictColor = !p || p.significant == null ? 'var(--muted2)' : within ? 'var(--muted2)' : p.delta >= 0 ? 'var(--pos)' : 'var(--warn)'
 
   return (
     <div className="wrap fadein">
@@ -93,18 +95,18 @@ export default function App() {
         <>
           <div className="hero">
             <div className="heromain">
-              <div className="k">External-flow markout · bot pool − control (+5min)</div>
-              <div className="bigmult" style={{ color: verdictColor, textShadow: 'none' }}>{fmtBps(ext.delta)}</div>
+              <div className="k">External-flow markout · bot pool − control (+5min, matched-minute)</div>
+              <div className="bigmult" style={{ color: verdictColor, textShadow: 'none' }}>{fmtBps(p?.delta)}</div>
               <div className="sub">
                 bot pool <b style={{ color: 'var(--pos)' }}>{fmtBps(ext.treat.m5Bps)}</b> vs control <b>{fmtBps(ext.ctrl.m5Bps)}</b>
-                {ext.deltaSE != null && <> · 95% CI ±{(1.96 * ext.deltaSE).toFixed(1)} bps</>}
+                {p?.se != null && <> · paired 95% CI ±{(1.96 * p.se).toFixed(1)} bps · {p.n} shared minutes</>}
               </div>
               <div className="hero-drift">
-                {ext.significant === false
-                  ? <><b style={{ color: 'var(--warn)' }}>Within noise</b> ({ext.sigma?.toFixed(1)}σ) — the difference is not yet statistically distinguishable from zero.</>
-                  : ext.significant
-                    ? <><b style={{ color: 'var(--pos)' }}>Significant</b> ({ext.sigma?.toFixed(1)}σ) over this window.</>
-                    : 'Not enough data to test significance.'}
+                {p?.significant === false
+                  ? <><b style={{ color: 'var(--warn)' }}>Within noise</b> ({p.sigma?.toFixed(1)}σ) — even after cancelling drift.</>
+                  : p?.significant
+                    ? <><b style={{ color: 'var(--pos)' }}>Borderline significant</b> ({p.sigma?.toFixed(1)}σ) — leans toward the bot pool; needs more weeks to confirm.</>
+                    : 'Not enough shared minutes to test yet.'}
               </div>
             </div>
             <div className="statgrid">
