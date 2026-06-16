@@ -8,8 +8,11 @@ function CIBar({ delta, se, scale }) {
   const X = (v) => mid + (v / scale) * (W / 2 - 8)
   const crossesZero = Math.abs(delta) <= ci
   const col = crossesZero ? 'var(--muted2)' : delta >= 0 ? 'var(--pos)' : 'var(--warn)'
+  const tipText = `Δ ${fmt(delta)} ± ${ci.toFixed(2)} bps · 95% CI ${fmt(delta - ci)} to ${fmt(delta + ci)}` +
+    (crossesZero ? ' · crosses zero (within noise)' : '')
   return (
     <svg className="ci-bar" viewBox={`0 0 ${W} ${H}`} width={W} height={H} preserveAspectRatio="none">
+      <title>{tipText}</title>
       <line x1={mid} x2={mid} y1="4" y2={H - 4} stroke="rgba(255,255,255,.22)" strokeWidth="1" />
       <line x1={X(delta - ci)} x2={X(delta + ci)} y1={H / 2} y2={H / 2} stroke={col} strokeWidth="2" />
       <line x1={X(delta - ci)} x2={X(delta - ci)} y1={H / 2 - 4} y2={H / 2 + 4} stroke={col} strokeWidth="2" />
