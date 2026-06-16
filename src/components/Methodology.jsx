@@ -6,7 +6,9 @@ const DEFS = [
   ['Horizons +0 / +1m / +5m', 'Markout right after the trade, then 1 and 5 minutes later. The decay from +0 to +5m is the adverse-selection cost. ~5 min is the market-microstructure standard (effects mostly settled); longer windows just measure price drift, not flow quality.'],
   ['bps of notional', 'Markout USD ÷ swap notional × 10,000 — markout per dollar traded, so pools and segments of different size compare directly.'],
   ['External vs bot flow', 'External = retail / third-party arbitrageurs. Bot = the fee-discount LVR bot. The bot\'s own markout is negative by design (it extracts the pool\'s LVR) — but that value is returned to LPs, so judge the pool on its EXTERNAL-flow markout.'],
-  ['The comparison', 'Both pools are identical cbBTC/WETH reCLAMM pools, so they share one reference price. Higher external-flow markout on the bot pool means the bot keeps the price fresher, so retail arrives less toxic and LPs do better — the bot improving pool efficiency, measured directly.'],
+  ['The comparison', 'Both pools are identical cbBTC/WETH reCLAMM pools, so they share one reference price. The hypothesis: if the bot keeps the price fresher, external/retail flow arrives less toxic and the bot pool shows higher external-flow markout. We test it same-window with confidence intervals rather than asserting it.'],
+  ['Same window only', 'The control was deployed after the bot pool, so the comparison is clamped to the period BOTH pools are live — otherwise the bot pool\'s longer, more volatile history (e.g. the Saylor BTC move) biases the result.'],
+  ['Confidence & the noise floor', 'Per-swap markout on a correlated pair at minute price resolution is dominated by genuine 5-min BTC/ETH drift — tens of bps per swap. Clustering by price-minute, the standard error is ~1–2 bps, comparable to the effect we are hunting. So single-bps differences read as "within noise"; only a sustained, multi-week gap is real.'],
 ]
 
 export default function Methodology() {

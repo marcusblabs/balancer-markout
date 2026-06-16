@@ -6,13 +6,13 @@ import { normalizeRows, computeMarkout } from './lib/markout'
 import { when, relative, compactNum } from './lib/format'
 import ApiKeyPanel from './components/ApiKeyPanel'
 import PeriodSelector from './components/PeriodSelector'
+import ComparisonPanel from './components/ComparisonPanel'
 import MarkoutCurve from './components/MarkoutCurve'
 import FlowTable from './components/FlowTable'
 import SwapsTable from './components/SwapsTable'
 import Methodology from './components/Methodology'
 
 const fmtBps = (x, d = 2) => (x == null ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d) + ' bps')
-const bpsColor = (x) => (x == null ? 'var(--muted2)' : x >= 0 ? 'var(--pos)' : 'var(--warn)')
 
 export default function App() {
   const [hasKey, setHasKey] = useState(() => !!getDuneApiKey())
@@ -34,9 +34,7 @@ export default function App() {
         catch (e) { if (e.code === 'NO_KEY') throw e; return load(true) }
         if (res.isEmpty) return load(true)
       }
-      setSwaps(normalizeRows(res.rows))
-      setExecutedAt(res.executedAt)
-      setStatus('ready')
+      setSwaps(normalizeRows(res.rows)); setExecutedAt(res.executedAt); setStatus('ready')
     } catch (e) {
       if (e.code === 'NO_KEY') { setHasKey(false); return }
       setError(e.message || String(e)); setStatus('error')
@@ -45,12 +43,7 @@ export default function App() {
 
   useEffect(() => {
     const demo = import.meta.env.DEV && typeof location !== 'undefined' && location.hash === '#demo'
-    if (demo) {
-      import('./lib/sampleRows.js').then(({ SAMPLE_ROWS }) => {
-        setSwaps(normalizeRows(SAMPLE_ROWS)); setStatus('ready')
-      })
-      return
-    }
+    if (demo) { import('./lib/sampleRows.js').then(({ SAMPLE_ROWS }) => { setSwaps(normalizeRows(SAMPLE_ROWS)); setStatus('ready') }); return }
     if (hasKey) load(false)
   }, [hasKey, load])
 
@@ -61,7 +54,11 @@ export default function App() {
   const busy = status === 'loading' || status === 'executing' || status === 'polling'
   const statusText = { loading: 'Loading cached results…', executing: 'Running query…', polling: 'Waiting for Dune…' }[status]
   const hasData = !!swaps.length
-  const h = mk.headline
+
+  // Headline = the external-flow comparison, framed honestly with its verdict.
+  const ext = mk.comparisons.find((c) => c.label === 'External flow')
+  const within = ext && ext.significant === false
+  const verdictColor = !ext || ext.significant == null ? 'var(--muted2)' : within ? 'var(--muted2)' : ext.delta >= 0 ? 'var(--pos)' : 'var(--warn)'
 
   return (
     <div className="wrap fadein">
@@ -69,11 +66,11 @@ export default function App() {
         <div className="title">
           <h1>Markout · <span>Bot pool vs control</span></h1>
           <p>
-            Per-swap markout (LP PnL marked to fair price at +5min) for the LVR{' '}
+            Per-swap markout (LP PnL vs fair price at +5min) for the LVR{' '}
             <a href={BALANCER_POOL_URL(TREATMENT_POOL)} target="_blank" rel="noreferrer">bot pool</a>{' '}
             vs its{' '}
             <a href={BALANCER_POOL_URL(CONTROL_POOL)} target="_blank" rel="noreferrer">control</a>{' '}
-            — measuring adverse selection and pool price-efficiency directly.
+            — adverse selection / pool price-efficiency, with honest confidence intervals.
           </p>
         </div>
         <div className="toolbar">
@@ -92,44 +89,53 @@ export default function App() {
       {error && <div className="banner">⚠ {error}</div>}
       {hasKey && busy && !hasData && <div className="card pad state" style={{ marginTop: 16 }}><span className="spinner" /> {statusText}</div>}
 
-      {hasData && (
+      {hasData && ext && (
         <>
           <div className="hero">
             <div className="heromain">
-              <div className="k">External-flow markout · bot pool advantage</div>
-              <div className="bigmult" style={{ color: bpsColor(h.deltaBps), textShadow: 'none' }}>{fmtBps(h.deltaBps)}</div>
+              <div className="k">External-flow markout · bot pool − control (+5min)</div>
+              <div className="bigmult" style={{ color: verdictColor, textShadow: 'none' }}>{fmtBps(ext.delta)}</div>
               <div className="sub">
-                bot pool <b style={{ color: 'var(--pos)' }}>{fmtBps(h.extTreatBps)}</b> vs control <b>{fmtBps(h.extCtrlBps)}</b> at +5min
+                bot pool <b style={{ color: 'var(--pos)' }}>{fmtBps(ext.treat.m5Bps)}</b> vs control <b>{fmtBps(ext.ctrl.m5Bps)}</b>
+                {ext.deltaSE != null && <> · 95% CI ±{(1.96 * ext.deltaSE).toFixed(1)} bps</>}
               </div>
-              <div className="hero-drift">higher = the bot keeps the pool fresher, so retail arrives less toxic</div>
+              <div className="hero-drift">
+                {ext.significant === false
+                  ? <><b style={{ color: 'var(--warn)' }}>Within noise</b> ({ext.sigma?.toFixed(1)}σ) — the difference is not yet statistically distinguishable from zero.</>
+                  : ext.significant
+                    ? <><b style={{ color: 'var(--pos)' }}>Significant</b> ({ext.sigma?.toFixed(1)}σ) over this window.</>
+                    : 'Not enough data to test significance.'}
+              </div>
             </div>
             <div className="statgrid">
               <div className="stat">
-                <div className="k">Bot pool · external</div>
-                <div className="v" style={{ color: bpsColor(mk.groups.treatExt.m5Bps) }}>{fmtBps(mk.groups.treatExt.m5Bps)}</div>
-                <div className="vsub">{compactNum(mk.groups.treatExt.n)} swaps · +5m</div>
+                <div className="k">Comparison window</div>
+                <div className="v">{mk.overlapDays.toFixed(1)}d</div>
+                <div className="vsub">since {mk.overlapStart ? when(new Date(mk.overlapStart).toISOString()) : '—'} · both pools live</div>
               </div>
               <div className="stat">
-                <div className="k">Control · external</div>
-                <div className="v" style={{ color: bpsColor(mk.groups.ctrlExt.m5Bps) }}>{fmtBps(mk.groups.ctrlExt.m5Bps)}</div>
-                <div className="vsub">{compactNum(mk.groups.ctrlExt.n)} swaps · +5m</div>
+                <div className="k">Bot (arb) markout</div>
+                <div className="v">{fmtBps(mk.groups.treatBot.m5Bps)}</div>
+                <div className="vsub">LVR extracted — returned separately</div>
               </div>
               <div className="stat">
-                <div className="k">Bot (arb) flow</div>
-                <div className="v" style={{ color: bpsColor(mk.groups.treatBot.m5Bps) }}>{fmtBps(mk.groups.treatBot.m5Bps)}</div>
-                <div className="vsub">LVR extracted → returned to LPs</div>
+                <div className="k">External swaps</div>
+                <div className="v">{compactNum(mk.groups.treatExt.n + mk.groups.ctrlExt.n)}</div>
+                <div className="vsub">{mk.groups.treatExt.episodes + mk.groups.ctrlExt.episodes} price-minutes</div>
               </div>
               <div className="stat">
-                <div className="k">Swaps analysed</div>
-                <div className="v">{compactNum(swaps.length)}</div>
-                <div className="vsub">both pools, priced</div>
+                <div className="k">Per-swap noise</div>
+                <div className="v">±tens bps</div>
+                <div className="vsub">5-min BTC/ETH drift · minute prices</div>
               </div>
             </div>
           </div>
 
+          <div className="section"><ComparisonPanel comparisons={mk.comparisons} /></div>
+
           <div className="section card pad">
             <div className="ph flush">Markout decay curve
-              <span className="right">bps of notional · as of {executedAt ? when(executedAt) : '—'}</span>
+              <span className="right">bps of notional · same window</span>
             </div>
             <MarkoutCurve curve={mk.curve} />
           </div>
@@ -142,10 +148,10 @@ export default function App() {
 
       <footer>
         <div>
-          Markout = inventory marked to fair USD price (prices.usd) at +5min · positive = LP favorable ·{' '}
+          Markout = inventory marked to fair USD price at +5min · same-window, clustered 95% CIs ·{' '}
           <a href={`https://dune.com/queries/${DUNE_QUERY_ID}`} target="_blank" rel="noreferrer">Dune query #{DUNE_QUERY_ID}</a>
         </div>
-        <div>External-flow advantage in <span className="pos">green</span></div>
+        <div>Within-noise differences shown as such</div>
       </footer>
     </div>
   )

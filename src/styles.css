@@ -235,3 +235,20 @@ footer .pos { color: var(--pos); }
 .mk-legend span { display: inline-flex; align-items: center; gap: 7px; }
 .mk-legend i { width: 13px; height: 3px; border-radius: 2px; display: inline-block; }
 .mk-legend b { font-weight: 500; }
+
+/* ── Comparison panel (CI table) ────────────────────── */
+.cmp { margin-top: 14px; }
+.cmp-head, .cmp-row { display: grid; grid-template-columns: 1.3fr 0.8fr 0.8fr 1.1fr 1.4fr 1.2fr; align-items: center; gap: 10px; }
+.cmp-head { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 0 0 8px; border-bottom: 1px solid var(--line2); }
+.cmp-row { padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.cmp-row:last-child { border-bottom: none; }
+.cmp-label { font-weight: 600; }
+.cmp .num { text-align: right; font-variant-numeric: tabular-nums; }
+.cmp-ci { display: flex; justify-content: center; }
+.ci-bar { width: 100%; max-width: 220px; height: 30px; }
+@media (max-width: 760px) {
+  .cmp-head { display: none; }
+  .cmp-row { grid-template-columns: 1fr auto; row-gap: 4px; padding: 12px 0; }
+  .cmp-row .cmp-label { grid-column: 1 / -1; }
+  .cmp-ci { display: none; }
+}
